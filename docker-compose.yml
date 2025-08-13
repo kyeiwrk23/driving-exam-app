@@ -1,0 +1,30 @@
+version: "3.8"
+
+services:
+  app:
+    build: .
+    ports:
+      - "8080:808"
+    networks:
+      n-network:
+
+
+  postgres:
+    image: postgres:trixie
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: 23Cel
+      POSTGRES_DB: Kay
+    ports:
+      - "5433:5432"
+    networks:
+      n-network:
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
+networks:
+  n-network:
+    driver: bridge
+
+volumes:
+  postgres-data:
