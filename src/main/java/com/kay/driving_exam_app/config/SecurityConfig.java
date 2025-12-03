@@ -30,10 +30,13 @@ public class SecurityConfig {
     @Autowired
     private JwtFilter jwtFilter;
 
+    @Autowired
+    private AuthenEntryPoint authenEntryPoint;
+
     @Bean
     public AuthenticationProvider authenticationProvider(){
         DaoAuthenticationProvider provider = new DaoAuthenticationProvider(userDetailsService);
-        provider.setPasswordEncoder(new BCryptPasswordEncoder(10));
+        provider.setPasswordEncoder(new BCryptPasswordEncoder());
         return  provider;
     }
 
@@ -42,14 +45,11 @@ public class SecurityConfig {
         http.csrf(AbstractHttpConfigurer::disable)
                 .sessionManagement(session->session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(request->request
-                        .requestMatchers(HttpMethod.POST,"/api/usersignup","/api/usersignin","/api/submit/**").permitAll()
-                        .requestMatchers(HttpMethod.POST,"/api/adminsignup","/api/adminsignin","/api/create","/api/addquestions").permitAll()
-                        .requestMatchers(HttpMethod.GET,"/api/getquizquestion/**","/api/questions").permitAll()
-                        .requestMatchers(HttpMethod.GET,"/api/category/**","api/deleteQuestion/**").permitAll()
-                        .requestMatchers(HttpMethod.PUT,"/api/updatequestion").permitAll()
+                        .requestMatchers("/api/user/**").permitAll()
                         .anyRequest().authenticated())
-                .authenticationProvider(authenticationProvider())
-                .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class);
+                .exceptionHandling(exception->exception.authenticationEntryPoint(authenEntryPoint))
+                .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class)
+                .authenticationProvider(authenticationProvider());
 
         return http.getOrBuild();
     }

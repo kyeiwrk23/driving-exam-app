@@ -8,13 +8,12 @@ import org.springframework.stereotype.Repository;
 import java.util.List;
 
 @Repository
-public interface QuestionDto extends JpaRepository<Question,Integer> {
+public interface QuestionRepository extends JpaRepository<Question,Long> {
     List<Question> findByCategory(String category);
 
-    //@Query(value = "SELECT * FROM question q WHERE question_text=:questionTest", nativeQuery = true)
-    Question findByQuestionText(String text);
 
     @Query(value = "SELECT * FROM question q WHERE q.category=:category ORDER BY RANDOM() LIMIT :num",nativeQuery = true)
     List<Question> findByCategoryRandom(String category, int num);
 
+    List<Question> findByQuestionText(String questionText);
 }

@@ -4,6 +4,7 @@ package com.kay.driving_exam_app.controller;
 import com.kay.driving_exam_app.model.Question;
 import com.kay.driving_exam_app.model.QuestionResponse;
 import com.kay.driving_exam_app.service.QuestionService;
+import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -15,43 +16,42 @@ import java.util.List;
 @RequestMapping("/api")
 public class QuestionController {
     @Autowired
-    private QuestionService questionServ;
+    private QuestionService questionService;
 
 
-    @GetMapping("/questions")
+    @GetMapping("/admin/questions")
     @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<List<QuestionResponse>>getAllQuestions(){
-        return questionServ.getAllQuestions();
+    public ResponseEntity<List<QuestionResponse>>getQuestions(){
+        return ResponseEntity.ok(questionService.getQuestions());
+    }
+
+
+    @GetMapping("/admin/category/{category}")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<List<QuestionResponse>> getCategoryQuestions(@PathVariable String category){
+       return ResponseEntity.ok(questionService.questionsByCategory(category));
 
     }
 
 
-    @GetMapping("/category/{category}")
+    @PutMapping("/admin/update/question/{id}")
     @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<List<QuestionResponse>> getQuestionByCategory(@PathVariable String category){
-       return questionServ.getQuestionByCategory(category);
-
+    public ResponseEntity<String> UpdateQuestion(@PathVariable Long id ,@Valid @RequestBody Question question){
+        return ResponseEntity.ok(questionService.updateQuestion(id,question));
     }
 
 
-    @PutMapping("/updatequestion")
+    @PostMapping("/admin/create/question")
     @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<String> addUpdateOneQuestion(@RequestBody Question question){
-        return questionServ.updateQuestion(question);
-    }
-
-
-    @PostMapping("/addquestions")
-    @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<List<QuestionResponse>> addMoreQuestion(@RequestBody List<Question> question)
+    public ResponseEntity<QuestionResponse> createQuestion(@Valid @RequestBody Question question)
     {
-        return questionServ.addMorethanOneQuestions(question);
+        return ResponseEntity.ok(questionService.createQuestion(question));
     }
 
 
-    @DeleteMapping("/deleteQuestion/{id}")
+    @DeleteMapping("/admin/delete/Question/{id}")
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<String> deleteQuestion(@PathVariable Long id){
-        return questionServ.deleteQuestion(id);
+        return ResponseEntity.ok(questionService.deleteQuestion(id));
     }
 }

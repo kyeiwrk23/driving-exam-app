@@ -7,6 +7,6 @@ import org.springframework.stereotype.Repository;
 
 
 @Repository
-public interface ExamDao extends JpaRepository<Exam,Long> {
+public interface ExamRepository extends JpaRepository<Exam,Long> {
 
 }

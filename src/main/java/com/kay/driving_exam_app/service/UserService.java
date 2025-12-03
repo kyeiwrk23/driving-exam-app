@@ -1,30 +1,41 @@
 package com.kay.driving_exam_app.service;
 
+import com.kay.driving_exam_app.config.JwtUtils;
 import com.kay.driving_exam_app.dto.SignInRequest;
 import com.kay.driving_exam_app.dto.SignUpRequest;
+import com.kay.driving_exam_app.dto.UserInfoResponse;
+import com.kay.driving_exam_app.exceptions.MyUserNotValidException;
+import com.kay.driving_exam_app.exceptions.ResourceAvailableException;
+import com.kay.driving_exam_app.exceptions.ResourceNotFoundException;
 import com.kay.driving_exam_app.model.Role;
+import com.kay.driving_exam_app.model.RoleImpl;
 import com.kay.driving_exam_app.model.User;
+import com.kay.driving_exam_app.model.UserPrincipal;
+import com.kay.driving_exam_app.repository.RoleRepository;
 import com.kay.driving_exam_app.repository.UserRepository;
-import lombok.RequiredArgsConstructor;
+import lombok.AllArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
+import org.springframework.http.ResponseCookie;
 import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.AuthenticationServiceException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
-import java.util.Locale;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
+import java.util.*;
 
 
 @Service
-@RequiredArgsConstructor
+@AllArgsConstructor
 public class UserService {
 
+    private static final Logger logger = LoggerFactory.getLogger(UserService.class);
     @Autowired
     private UserRepository userRepository;
 
@@ -34,65 +45,101 @@ public class UserService {
     @Autowired
     private AuthenticationManager authenticationManager;
 
-    final Pattern VALID_EMAIL_REGEX =  Pattern.compile( "[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,6}",Pattern.CASE_INSENSITIVE);
+    @Autowired
+    private RoleRepository roleRepository;
+
+
 
 
     private final BCryptPasswordEncoder encoder = new BCryptPasswordEncoder(10);
+    @Autowired
+    private JwtUtils jwtUtils;
 
 
-
-    public ResponseEntity<String> UserSignUpSave(SignUpRequest signUpUser) {
+    public String saveSignUp(SignUpRequest signUpUser) {
+        if(userRepository.existsUserByEmail(signUpUser.getEmail())){
+            throw new ResourceAvailableException(signUpUser.getEmail());
+        }
 
 
         User newUser = new User();
-        if( userRepository.findByEmail(signUpUser.getEmail())==null) {
-            Matcher matcher = VALID_EMAIL_REGEX.matcher(signUpUser.getEmail());
-            if(matcher.matches()) {
-                newUser.setFirstName(signUpUser.getFirstName());
-                newUser.setLastName(signUpUser.getLastName());
-                newUser.setEmail(signUpUser.getEmail().toLowerCase(Locale.ROOT));
-                newUser.setPassword(encoder.encode(signUpUser.getPassword()));
-                newUser.setCreatedAt(LocalDateTime.now());
-                newUser.setUpdatedAt(LocalDateTime.now());
-                newUser.setRole(Role.ROLE_USER);
-                userRepository.save(newUser);
-                return ResponseEntity.ok().body(jwtService.generateToken(signUpUser.getEmail()));
-            }else{
-                return ResponseEntity.status(HttpStatus.NOT_ACCEPTABLE).body("Enter Correct Email Address");
-            }
-        }else
-            return ResponseEntity.status(HttpStatus.NOT_MODIFIED).body("User Already Exist");
+        newUser.setFirstName(signUpUser.getFirstName());
+        newUser.setLastName(signUpUser.getLastName());
+        newUser.setEmail(signUpUser.getEmail().toLowerCase(Locale.ROOT));
+        newUser.setPassword(encoder.encode(signUpUser.getPassword()));
+        newUser.setCreatedAt(LocalDateTime.now());
+        newUser.setUpdatedAt(LocalDateTime.now());
+
+        Set<String> roleTypes = signUpUser.getRole();
+        Set<Role> role = new HashSet<>();
+        for (String roleType : roleTypes) {
+            logger.debug("Role: {}", roleType);
         }
 
 
 
-    public ResponseEntity<String> signIn(SignInRequest credentials){
-        Authentication authentication = authenticationManager.authenticate(new UsernamePasswordAuthenticationToken(credentials.getEmail(),credentials.getPassword()));
-        if(authentication.isAuthenticated())
-            return ResponseEntity.ok().body(jwtService.generateToken(credentials.getEmail()));
-        else
-            return ResponseEntity.status(HttpStatus.NOT_FOUND).body("Login Failed");
+        if (roleTypes.isEmpty()) {
+            Role userRole = roleRepository.findByRoleName(RoleImpl.ROLE_USER)
+                    .orElseThrow(()-> new ResourceNotFoundException("Error: Role Not Found "));
+            role.add(userRole);
+        }else{
+            roleTypes.forEach(roles->{
+                switch (roles) {
+                    case "admin":
+                        Role adminRole = roleRepository.findByRoleName(RoleImpl.ROLE_ADMIN)
+                                .orElseThrow(()-> new ResourceNotFoundException("Error: Role Not Found "));
+                        role.add(adminRole);
+                        break;
+                    case "instructor":
+                            Role instructorRole = roleRepository.findByRoleName(RoleImpl.ROLE_USER)
+                                    .orElseThrow(()-> new ResourceNotFoundException("Error: Role Not Found "));
+                            role.add(instructorRole);
+                            break;
+                    default:
+                        Role userRole = roleRepository.findByRoleName(RoleImpl.ROLE_INSTRUCTOR)
+                                .orElseThrow(()-> new ResourceNotFoundException("Error: Role Not Found "));
+                        role.add(userRole);
+                }
+            });
+        }
+
+        newUser.setRoles(role);
+        userRepository.save(newUser);
+            return "Successfully Signed Up";
+        }
 
 
+
+    public UserInfoResponse signIn(SignInRequest credentials){
+        Authentication authentication;
+                try{
+                    authentication = authenticationManager.authenticate(
+                            new UsernamePasswordAuthenticationToken(credentials.getEmail(),credentials.getPassword()));
+
+                }catch (MyUserNotValidException e){
+                    throw new MyUserNotValidException(credentials.getEmail(), credentials.getPassword());
+                }
+
+        SecurityContextHolder.getContext().setAuthentication(authentication);
+        UserPrincipal userDetails = (UserPrincipal) authentication.getPrincipal();
+        ResponseCookie jwtToken = jwtUtils.generateJwtCookie(userDetails);
+        List<String> roles = userDetails.getAuthorities()
+                .stream()
+                .map(GrantedAuthority::getAuthority)
+                .toList();
+
+        return new UserInfoResponse(
+                userDetails.getUserId(),
+                userDetails.getFirstName(),
+                userDetails.getLastName(),
+                userDetails.getEmail(),
+                jwtToken,
+                roles
+        );
     }
 
-    public ResponseEntity<String> adminSignUpSave(SignUpRequest adminUser) {
-        var admin = new User();
-       if(userRepository.findByEmail(adminUser.getEmail()) !=null) {
-           Matcher matcher = VALID_EMAIL_REGEX.matcher(adminUser.getEmail());
-           if (matcher.matches()) {
-               admin.setFirstName(adminUser.getFirstName());
-               admin.setLastName(adminUser.getLastName());
-               admin.setEmail(adminUser.getEmail().toLowerCase(Locale.ROOT));
-               admin.setPassword(encoder.encode(adminUser.getPassword()));
-               admin.setRole(Role.ROLE_ADMIN);
-               userRepository.save(admin);
-               return ResponseEntity.ok().body(jwtService.generateToken(adminUser.getEmail()));
-           }
-           else{
-               return ResponseEntity.status(HttpStatus.NOT_ACCEPTABLE).body("Enter Correct Email Address");
-           }
-       }else
-            return ResponseEntity.status(HttpStatus.NOT_MODIFIED).body("Admin Already Exist");
+    public ResponseCookie signOutUser(){
+        return jwtUtils.getCleanJwtCookie();
     }
+
 }

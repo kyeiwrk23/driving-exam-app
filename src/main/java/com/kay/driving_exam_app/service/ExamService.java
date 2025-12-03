@@ -1,40 +1,46 @@
 package com.kay.driving_exam_app.service;
 
 
+
+import com.kay.driving_exam_app.exceptions.ResourceNotFoundException;
 import com.kay.driving_exam_app.model.Exam;
 import com.kay.driving_exam_app.model.Question;
 import com.kay.driving_exam_app.model.QuestionResponse;
 import com.kay.driving_exam_app.model.Response;
-import com.kay.driving_exam_app.repository.ExamDao;
-import com.kay.driving_exam_app.repository.QuestionDto;
+import com.kay.driving_exam_app.repository.ExamRepository;
+import com.kay.driving_exam_app.repository.QuestionRepository;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
 
+
 @Service
 public class ExamService {
     @Autowired
-    private ExamDao examDao;
+    private ExamRepository examRepository;
+
     @Autowired
-    private QuestionDto questionDto;
-    public ResponseEntity<String> createQuiz(String category,int num,String name) {
-        List<Question> questionList = questionDto.findByCategoryRandom(category,num);
+    private QuestionRepository  questionRepository;
+
+    public String createQuiz(String category,int num,String name) {
+        List<Question> questionList = questionRepository.findByCategoryRandom(category,num);
+        if(questionList.isEmpty()){
+            throw new ResourceNotFoundException("Question not found");
+        }
         Exam exam = new Exam();
         exam.setName(name);
         exam.setQuestions(questionList);
-        examDao.save(exam);
+        examRepository.save(exam);
 
-        return new ResponseEntity<>("created", HttpStatus.OK);
+        return "Exam created";
     }
 
-    public ResponseEntity<List<QuestionResponse>> getQuizById(Long id) {
-        Exam exam = examDao.findById(id).get();
-        List<Question> question = exam.getQuestions();
+    public List<QuestionResponse> getExam(Long id) {
+        Exam exam = examRepository.findById(id).orElseThrow(() -> new ResourceNotFoundException("Exams not found"));
+        List<Question> questions = exam.getQuestions();
 
-        List<QuestionResponse> questRes = question
+        List<QuestionResponse> questionResponse = questions
                         .stream()
                       .map(quest->new QuestionResponse(
                         quest.getQuestion_id(),
@@ -45,15 +51,18 @@ public class ExamService {
                         quest.getOptionC(),
                         quest.getOptionD())).toList();
 
-        return  new ResponseEntity<>(questRes,HttpStatus.OK);
+        return questionResponse;
     }
 
-    public ResponseEntity<?> calculateResult(Long id,List<Response> responses) {
+    public Integer calculateResult(Long id,List<Response> responses) {
         Response res = responses.get(0);
         System.out.println("id: "+res.getId()+" answer:"+res.getAnswer());
         int tag = 0;
-        Exam exam = examDao.findById(id).get();
+        Exam exam = examRepository.findById(id).orElseThrow(() -> new ResourceNotFoundException("Exams not found"));
         List<Question> questions = exam.getQuestions();
+        if(questions.isEmpty()){
+            throw new ResourceNotFoundException("Exam " + exam.getName() + "have no questions");
+        }
         for(Response response: responses) {
             for(Question question : questions) {
                 if (response.getAnswer().equals(question.getCorrectAnswer())) {
@@ -62,6 +71,7 @@ public class ExamService {
             }
         }
 
-        return new ResponseEntity<>(tag,HttpStatus.OK);
+        return tag;
+
     }
 }

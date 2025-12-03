@@ -1,25 +1,29 @@
 package com.kay.driving_exam_app.model;
 
 import jakarta.persistence.*;
-import lombok.AllArgsConstructor;
-import lombok.Data;
-import lombok.NoArgsConstructor;
+import lombok.*;
 
+import java.util.ArrayList;
 import java.util.List;
 
 @Entity
-@Data
+@Getter
+@Setter
 @AllArgsConstructor
 @NoArgsConstructor
+@Table(name = "exam")
 public class Exam {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long exam_id;
     private String name;
 
-    @ManyToMany
+    @ManyToMany(cascade = {CascadeType.PERSIST, CascadeType.MERGE})
     @JoinTable(name = "exam_question",
     joinColumns = @JoinColumn(name = "exam_id"),
     inverseJoinColumns = @JoinColumn(name="question_id"))
-    private List<Question> questions;
+    private List<Question> questions = new ArrayList<>();
+
+    @ManyToMany(cascade = {CascadeType.PERSIST, CascadeType.MERGE},mappedBy = "exam")
+    private List<User> users = new ArrayList<>();
 }

@@ -5,6 +5,7 @@ package com.kay.driving_exam_app.controller;
 import com.kay.driving_exam_app.model.QuestionResponse;
 import com.kay.driving_exam_app.model.Response;
 import com.kay.driving_exam_app.service.ExamService;
+import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -20,24 +21,26 @@ public class ExamController {
     private ExamService examServ;
 
 
-    @PostMapping("/create")
+    @PostMapping("/admin/exam/create")
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<String> createQuiz(@RequestParam String category,@RequestParam int num, @RequestParam String name){
-         return examServ.createQuiz(category,num,name);
+        var message = examServ.createQuiz(category,num,name);
+        return ResponseEntity.ok(message);
 
     }
 
 
-    @GetMapping("/getquizquestion/{id}")
+    @GetMapping("/public/quiz/questions/{id}")
     @PreAuthorize("hasRole('USER')")
-    public ResponseEntity<List<QuestionResponse>> getQuizById(@PathVariable Long id){
-        return examServ.getQuizById(id);
+    public ResponseEntity<List<QuestionResponse>> getExam(@PathVariable Long id){
+        return ResponseEntity.ok(examServ.getExam(id));
     }
 
 
-    @PostMapping("/submit/{id}")
+    @PostMapping("/public/submit/{id}")
     @PreAuthorize("hasRole('USER')")
-    public ResponseEntity<?> getScore(@PathVariable Long id,@RequestBody List<Response> responses){
-        return examServ.calculateResult(id,responses);
+    public ResponseEntity<Integer> getScore(@PathVariable Long id,@Valid @RequestBody List<Response> responses){
+        Integer results = examServ.calculateResult(id,responses);
+        return ResponseEntity.ok(results);
     }
 }

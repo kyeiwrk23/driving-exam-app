@@ -1,30 +1,38 @@
 package com.kay.driving_exam_app.service;
 
 
+import com.kay.driving_exam_app.exceptions.ResourceAvailableException;
+import com.kay.driving_exam_app.exceptions.ResourceNotFoundException;
 import com.kay.driving_exam_app.model.Question;
 import com.kay.driving_exam_app.model.QuestionResponse;
-import com.kay.driving_exam_app.repository.QuestionDto;
+import com.kay.driving_exam_app.repository.QuestionRepository;
+import lombok.AllArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
 
-@Service
 
+@Service
+@AllArgsConstructor
 public class QuestionService {
 
     private static final Logger logger = LoggerFactory.getLogger(QuestionService.class);
+
     @Autowired
-    private QuestionDto questionDto;
-    public ResponseEntity<List<QuestionResponse>> getAllQuestions() {
-        List<Question> questions = questionDto.findAll();
-        List<QuestionResponse> res = questions
+    private QuestionRepository questionRepository;
+
+    public List<QuestionResponse> getQuestions() {
+        List<Question> questions = questionRepository.findAll();
+        if (questions.isEmpty()) {
+            throw new ResourceNotFoundException("Questions not yet loaded");
+        }
+
+        return questions
                 .stream()
-                .map(quest ->new QuestionResponse(
+                .map(quest -> new QuestionResponse(
                         quest.getQuestion_id(),
                         quest.getCategory(),
                         quest.getQuestionText(),
@@ -32,22 +40,16 @@ public class QuestionService {
                         quest.getOptionB(),
                         quest.getOptionC(),
                         quest.getOptionD())).toList();
-        try {
-            return new ResponseEntity<>(res, HttpStatus.OK);
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-        return ResponseEntity.noContent().build();
     }
 
-    public ResponseEntity<List<QuestionResponse>> getQuestionByCategory(String category) {
-        List<Question> quest = questionDto.findByCategory(category);
+    public List<QuestionResponse> questionsByCategory(String category) {
+        List<Question> quest = questionRepository.findByCategory(category);
 
-        if(category == null || category.isEmpty() || quest.isEmpty()){
-            logger.info("The category value is empty or doesn't exist");
+        if (quest.isEmpty()) {
+            throw new ResourceNotFoundException("There are no Questions on " + category + "loaded !!!");
         }
 
-        List<QuestionResponse> questRes = quest.stream().map(response ->new QuestionResponse(
+        return quest.stream().map(response ->new QuestionResponse(
                         response.getQuestion_id(),
                         response.getCategory(),
                         response.getQuestionText(),
@@ -55,63 +57,47 @@ public class QuestionService {
                         response.getOptionB(),
                         response.getOptionC(),
                         response.getOptionD())).toList();
-
-        try {
-            return new ResponseEntity<>(questRes,HttpStatus.OK);
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-
-        return ResponseEntity.badRequest().build();
     }
 
-    public ResponseEntity<String> updateQuestion(Question question) {
-        Question getquestion = questionDto.findByQuestionText(question.getQuestionText());
-        if(getquestion.getQuestionText().equalsIgnoreCase(question.getQuestionText())) {
-            getquestion.setCategory(question.getCategory());
-            getquestion.setCorrectAnswer(question.getCorrectAnswer());
-            getquestion.setOptionA(question.getOptionA());
-            getquestion.setOptionB(question.getOptionB());
-            getquestion.setOptionC(question.getOptionC());
-            getquestion.setOptionD(question.getOptionD());
-            getquestion.setQuestionText(question.getQuestionText());
+
+    public String updateQuestion(Long id,Question question) {
+        Question savedquestion = questionRepository.findById(id).orElseThrow(() -> new ResourceNotFoundException("Question not found"));
+        if(savedquestion.getQuestionText().equalsIgnoreCase(question.getQuestionText())) {
+            savedquestion.setCategory(question.getCategory());
+            savedquestion.setCorrectAnswer(question.getCorrectAnswer());
+            savedquestion.setOptionA(question.getOptionA());
+            savedquestion.setOptionB(question.getOptionB());
+            savedquestion.setOptionC(question.getOptionC());
+            savedquestion.setOptionD(question.getOptionD());
+            savedquestion.setQuestionText(question.getQuestionText());
         }
 
-            questionDto.save(getquestion);
-
-        try {
-            return new ResponseEntity<>("Updated",HttpStatus.CREATED);
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-        return ResponseEntity.badRequest().build();
+        questionRepository.save(savedquestion);
+        return "Question updated successfully";
     }
 
-    public ResponseEntity<List<QuestionResponse>> addMorethanOneQuestions(List<Question> question) {
-        if(question.isEmpty())
-            logger.info("The list of questions are empty");
-        List<Question> quest = questionDto.saveAll(question);
+    public QuestionResponse createQuestion(Question question) {
 
-        List<QuestionResponse> questRes = quest.stream().map(response ->new QuestionResponse(
-                response.getQuestion_id(),
-                response.getCategory(),
-                response.getQuestionText(),
-                response.getOptionA(),
-                response.getOptionB(),
-                response.getOptionC(),
-                response.getOptionD())).toList();
-
-        try {
-            return new ResponseEntity<>(questRes,HttpStatus.CREATED);
-        }catch (Exception e) {
-            e.printStackTrace();
+        List<Question> questions = questionRepository.findByCategory(question.getCategory());
+        if(questions.stream().anyMatch(c->c.getQuestionText().equalsIgnoreCase(question.getQuestionText()))){
+            throw new ResourceAvailableException(question.getQuestionText());
         }
+        questionRepository.save(question);
+        QuestionResponse questionResponse = new QuestionResponse();
+        questionResponse.setQuestion_id(question.getQuestion_id());
+        questionResponse.setCategory(question.getCategory());
+        questionResponse.setQuestionText(question.getQuestionText());
+        questionResponse.setOptionA(question.getOptionA());
+        questionResponse.setOptionB(question.getOptionB());
+        questionResponse.setOptionC(question.getOptionC());
+        questionResponse.setOptionD(question.getOptionD());
 
-        return ResponseEntity.badRequest().build();
+        return questionResponse;
     }
 
-    public ResponseEntity<String> deleteQuestion(Long id) {
-        questionDto.deleteById(id.intValue());
-        return ResponseEntity.ok("Deleted");
+    public String deleteQuestion(Long id) {
+        var user = questionRepository.findById(id).orElseThrow(() -> new ResourceNotFoundException("Question not found"));
+        questionRepository.deleteById(id);
+        return "Question deleted successfully";
     }
 }
